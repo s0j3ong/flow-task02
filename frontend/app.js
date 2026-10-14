@@ -1,6 +1,5 @@
 "use strict";
 
-const API_BASE = "/api";
 const TITLE_MAX_LENGTH = 100;
 const DESCRIPTION_MAX_LENGTH = 2000;
 const SEARCH_DELAY_MS = 300;
@@ -19,6 +18,8 @@ const DEFAULT_PRIORITY = "NORMAL";
 // 마지막으로 API에서 받은 목록(검색·필터 적용 결과).
 let tasks = [];
 let loadFailed = false;
+// 로그인 폼으로 방금 로그인했을 때만 아이디를 안다. 새로고침 후 세션만 유효한 경우는 모른다.
+let currentUsername = null;
 // 늦게 도착한 이전 목록 응답이 최신 결과를 덮어쓰지 않도록 요청 번호를 비교한다.
 let listRequestId = 0;
 let searchTimer = null;
@@ -27,8 +28,10 @@ let editingId = null;
 let editError = "";
 // 수정을 시작하거나 수정 오류가 났을 때만 수정 입력칸으로 포커스를 옮긴다.
 let focusEditForm = false;
-// 제목 검색, 상태, 우선순위 필터. 빈 값은 조건 없음이며 API에서 AND로 적용한다.
-const filters = { query: "", status: "", priority: "" };
+// 제목 검색, 우선순위 필터. 빈 값은 조건 없음이며 API에서 AND로 적용한다.
+const filters = { query: "", priority: "" };
+// 좌측 인덱스에서 고른 화면. "todo"는 미완료·기한 전, "archive"는 완료했거나 기한이 지난 항목.
+let currentView = "todo";
 
 const form = document.getElementById("task-form");
 const titleInput = document.getElementById("task-title");
@@ -39,58 +42,28 @@ const submitButton = document.getElementById("submit-button");
 const formError = document.getElementById("form-error");
 const apiError = document.getElementById("api-error");
 const searchInput = document.getElementById("search-input");
-const statusFilter = document.getElementById("filter-status");
 const priorityFilter = document.getElementById("filter-priority");
 const taskList = document.getElementById("task-list");
 const taskCount = document.getElementById("task-count");
 const emptyMessage = document.getElementById("empty-message");
+const viewTitle = document.getElementById("view-title");
+const navTodoButton = document.getElementById("nav-todo");
+const navArchiveButton = document.getElementById("nav-archive");
+const pageHeading = document.getElementById("page-heading");
+const DEFAULT_PAGE_TITLE = "Task Flow";
+const tasksArea = document.getElementById("tasks-area");
+const authPage = document.getElementById("auth-page");
+const appPage = document.getElementById("app-page");
+const loginForm = document.getElementById("login-form");
+const loginUsernameInput = document.getElementById("login-username");
+const loginPasswordInput = document.getElementById("login-password");
+const loginPasswordToggle = document.getElementById("login-password-toggle");
+const loginButton = document.getElementById("login-button");
+const loginError = document.getElementById("login-error");
+const accountInfo = document.getElementById("account-info");
+const logoutButton = document.getElementById("logout-button");
 
-class ApiError extends Error {
-  constructor(message, status) {
-    super(message);
-    this.status = status;
-  }
-}
-
-// FastAPI 오류 응답({"detail": ...})을 화면에 보여 줄 문장으로 바꾼다.
-function errorMessage(body, status) {
-  if (body && Array.isArray(body.detail) && body.detail.length > 0) {
-    return body.detail.map((item) => String(item.msg).replace(/^Value error, /, "")).join(" ");
-  }
-  if (body && typeof body.detail === "string") {
-    return body.detail;
-  }
-  return `요청을 처리하지 못했습니다. (HTTP ${status})`;
-}
-
-async function request(method, path, body) {
-  const options = { method };
-  if (body !== undefined) {
-    options.headers = { "Content-Type": "application/json" };
-    options.body = JSON.stringify(body);
-  }
-
-  let response;
-  try {
-    response = await window.fetch(`${API_BASE}${path}`, options);
-  } catch (networkError) {
-    throw new ApiError("API 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요.", 0);
-  }
-
-  if (response.status === 204) {
-    return null;
-  }
-  let data = null;
-  try {
-    data = await response.json();
-  } catch (parseError) {
-    data = null;
-  }
-  if (!response.ok) {
-    throw new ApiError(errorMessage(data, response.status), response.status);
-  }
-  return data;
-}
+setupPasswordToggle(loginPasswordInput, loginPasswordToggle);
 
 function textLength(value) {
   return Array.from(value).length;
@@ -165,7 +138,7 @@ function findTask(id) {
 }
 
 function hasFilters() {
-  return filters.query.trim() !== "" || filters.status !== "" || filters.priority !== "";
+  return filters.query.trim() !== "" || filters.priority !== "";
 }
 
 function listPath() {
@@ -174,17 +147,16 @@ function listPath() {
   if (query !== "") {
     params.set("q", query);
   }
-  if (filters.status !== "") {
-    params.set("status", filters.status);
-  }
   if (filters.priority !== "") {
     params.set("priority", filters.priority);
   }
   const queryString = params.toString();
+  // TODO·ARCHIVE 구분은 archived 값으로 화면에서 분류한다(visibleTasks).
   return queryString === "" ? "/tasks" : `/tasks?${queryString}`;
 }
 
 // API에서 현재 검색·필터 조건의 목록을 다시 받아 화면을 그린다.
+// 401(로그인 필요)은 일반 오류와 다르게 로그인 화면 전환으로 처리한다.
 async function loadTasks() {
   const requestId = ++listRequestId;
   try {
@@ -195,12 +167,22 @@ async function loadTasks() {
     tasks = data;
     loadFailed = false;
     apiError.textContent = "";
+    tasksArea.hidden = false;
+    showAccountView();
   } catch (error) {
     if (requestId !== listRequestId) {
       return;
     }
-    loadFailed = true;
-    apiError.textContent = `목록을 불러오지 못했습니다. ${error.message}`;
+    if (error.status === 401) {
+      tasks = [];
+      loadFailed = false;
+      apiError.textContent = "";
+      tasksArea.hidden = true;
+      showLoginView();
+    } else {
+      loadFailed = true;
+      apiError.textContent = `목록을 불러오지 못했습니다. ${error.message}`;
+    }
   }
   render();
 }
@@ -229,6 +211,15 @@ function todayString() {
 
 function isOverdue(task, today) {
   return task.due_date !== null && task.status !== "DONE" && task.due_date < today;
+}
+
+// 사용자가 직접 보관 처리한 항목만 ARCHIVE로 분류한다(F14). 완료(DONE) 여부는 보관에 영향이 없다.
+function visibleTasks() {
+  return tasks.filter((task) => (currentView === "archive" ? task.archived : !task.archived));
+}
+
+function setArchived(id, archived) {
+  return runAction(() => request("PATCH", `/tasks/${id}`, { archived }));
 }
 
 function changeStatus(id, status) {
@@ -441,6 +432,11 @@ function createTaskItem(task, today) {
   actions.className = "task-actions";
   actions.appendChild(createStatusSelect(task));
   actions.appendChild(createButton("수정", () => startEdit(task.id)));
+  actions.appendChild(
+    task.archived
+      ? createButton("복원", () => setArchived(task.id, false))
+      : createButton("보관", () => setArchived(task.id, true))
+  );
   actions.appendChild(createButton("삭제", () => deleteTask(task.id)));
 
   main.appendChild(info);
@@ -452,9 +448,10 @@ function createTaskItem(task, today) {
 function render() {
   taskList.replaceChildren();
   const today = todayString();
+  const shown = visibleTasks();
   let focusTarget = null;
 
-  for (const task of tasks) {
+  for (const task of shown) {
     const created = createTaskItem(task, today);
     taskList.appendChild(created.item);
     if (created.focusTarget) {
@@ -462,20 +459,39 @@ function render() {
     }
   }
 
-  taskCount.textContent = hasFilters() ? `(검색 결과 ${tasks.length})` : `(${tasks.length})`;
-  emptyMessage.hidden = tasks.length > 0;
-  if (loadFailed && tasks.length === 0) {
+  taskCount.textContent = hasFilters() ? `(검색 결과 ${shown.length})` : `(${shown.length})`;
+  emptyMessage.hidden = shown.length > 0;
+  if (loadFailed && shown.length === 0) {
     emptyMessage.textContent = "목록을 불러오지 못했습니다.";
+  } else if (hasFilters()) {
+    emptyMessage.textContent = "조건에 맞는 할 일이 없습니다.";
   } else {
-    emptyMessage.textContent = hasFilters()
-      ? "조건에 맞는 할 일이 없습니다."
-      : "등록된 할 일이 없습니다.";
+    emptyMessage.textContent =
+      currentView === "archive" ? "보관된 항목이 없습니다." : "등록된 할 일이 없습니다.";
   }
   if (focusTarget && focusEditForm) {
     focusTarget.focus();
   }
   focusEditForm = false;
 }
+
+function setView(view) {
+  currentView = view;
+  viewTitle.textContent = view === "archive" ? "ARCHIVE" : "TODO";
+  navTodoButton.classList.toggle("active", view === "todo");
+  navArchiveButton.classList.toggle("active", view === "archive");
+  // 새 항목은 항상 TODO로 시작하므로(F03) 등록 폼은 TODO 화면에서만 보여준다.
+  form.hidden = view === "archive";
+  formError.hidden = view === "archive";
+  if (editingId !== null) {
+    editingId = null;
+    editError = "";
+  }
+  render();
+}
+
+navTodoButton.addEventListener("click", () => setView("todo"));
+navArchiveButton.addEventListener("click", () => setView("archive"));
 
 function resetForm() {
   titleInput.value = "";
@@ -520,15 +536,77 @@ form.addEventListener("submit", async (event) => {
   await loadTasks();
 });
 
+function setPageTitle(username) {
+  const title = username ? `${username}'s Task Flow` : DEFAULT_PAGE_TITLE;
+  pageHeading.textContent = title;
+  document.title = title;
+}
+
+// 방금 로그인 폼으로 로그인했으면 아이디를 보여주고, 새로고침으로 세션만 확인된 경우는 일반 문구를 보여준다.
+function showAccountView() {
+  authPage.hidden = true;
+  appPage.hidden = false;
+  accountInfo.textContent = currentUsername ? `${currentUsername}님` : "로그인됨";
+  setPageTitle(currentUsername);
+}
+
+function showLoginView() {
+  currentUsername = null;
+  authPage.hidden = false;
+  appPage.hidden = true;
+  loginForm.reset();
+  setPageTitle(null);
+}
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (loginButton.disabled) {
+    return;
+  }
+
+  const username = loginUsernameInput.value.trim();
+  const password = loginPasswordInput.value;
+  if (username === "" || password === "") {
+    loginError.textContent = "아이디와 비밀번호를 입력하세요.";
+    return;
+  }
+
+  loginButton.disabled = true;
+  try {
+    const user = await request("POST", "/auth/login", { username, password });
+    loginError.textContent = "";
+    currentUsername = user.username;
+    await loadTasks();
+  } catch (requestError) {
+    loginError.textContent = requestError.message;
+  } finally {
+    loginButton.disabled = false;
+  }
+});
+
+logoutButton.addEventListener("click", async () => {
+  if (logoutButton.disabled) {
+    return;
+  }
+  logoutButton.disabled = true;
+  try {
+    await request("POST", "/auth/logout");
+    showLoginView();
+    tasks = [];
+    tasksArea.hidden = true;
+    render();
+  } catch (requestError) {
+    apiError.textContent = requestError.message;
+  } finally {
+    logoutButton.disabled = false;
+  }
+});
+
 searchInput.addEventListener("input", () => {
   filters.query = searchInput.value;
   // 글자를 입력할 때마다 요청하지 않도록 입력이 멈춘 뒤 조회한다.
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(loadTasks, SEARCH_DELAY_MS);
-});
-statusFilter.addEventListener("change", () => {
-  filters.status = statusFilter.value;
-  loadTasks();
 });
 priorityFilter.addEventListener("change", () => {
   filters.priority = priorityFilter.value;

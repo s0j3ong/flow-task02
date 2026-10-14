@@ -7,58 +7,95 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main class="container">
-    <h1>Task Flow</h1>
+  <div class="auth-page" id="auth-page">
+    <div class="auth-card">
+      <h1 class="auth-title">다시 오신 걸 환영해요</h1>
+      <p class="auth-subtitle">아이디와 비밀번호로 로그인하세요.</p>
 
-    <form id="task-form" class="task-form" novalidate>
-      <div class="form-row">
-        <label for="task-title" class="sr-only">할 일 제목</label>
-        <input id="task-title" name="title" type="text" placeholder="할 일 제목 (1~100자)" autocomplete="off">
-        <button id="submit-button" type="submit">등록</button>
-      </div>
-      <div class="form-row">
-        <label for="task-priority">우선순위</label>
-        <select id="task-priority" name="priority">
-          <option value="HIGH">높음</option>
-          <option value="NORMAL" selected>보통</option>
-          <option value="LOW">낮음</option>
-        </select>
-        <label for="task-due">마감일</label>
-        <input id="task-due" name="due_date" type="date">
-      </div>
-      <label for="task-description" class="sr-only">설명</label>
-      <textarea id="task-description" name="description" rows="2" placeholder="설명 (선택, 최대 2000자)"></textarea>
-    </form>
-    <p id="form-error" class="form-error" role="alert"></p>
-    <p id="api-error" class="form-error" role="alert"></p>
-
-    <section aria-labelledby="list-heading">
-      <h2 id="list-heading">할 일 목록 <span id="task-count" class="count">(0)</span></h2>
-
-      <div class="filter-bar">
-        <label for="search-input" class="sr-only">제목 검색</label>
-        <input id="search-input" type="search" placeholder="제목 검색" autocomplete="off">
-        <label for="filter-status" class="sr-only">상태 필터</label>
-        <select id="filter-status">
-          <option value="">상태 전체</option>
-          <option value="TODO">할 일</option>
-          <option value="DOING">진행 중</option>
-          <option value="DONE">완료</option>
-        </select>
-        <label for="filter-priority" class="sr-only">우선순위 필터</label>
-        <select id="filter-priority">
-          <option value="">우선순위 전체</option>
-          <option value="HIGH">높음</option>
-          <option value="NORMAL">보통</option>
-          <option value="LOW">낮음</option>
-        </select>
+      <div class="auth-tabs">
+        <span class="auth-tab active">로그인</span>
+        <a class="auth-tab" href="signup.html">회원가입</a>
       </div>
 
-      <p id="empty-message" class="empty-message">등록된 할 일이 없습니다.</p>
-      <ul id="task-list" class="task-list"></ul>
-    </section>
+      <form id="login-form" class="auth-form" novalidate>
+        <div class="form-field">
+          <label for="login-username">아이디</label>
+          <input id="login-username" name="username" type="text" autocomplete="username">
+        </div>
+        <div class="form-field">
+          <label for="login-password">비밀번호</label>
+          <div class="password-field">
+            <input id="login-password" name="password" type="password" autocomplete="current-password">
+            <button type="button" id="login-password-toggle" class="password-toggle"></button>
+          </div>
+        </div>
+        <button id="login-button" type="submit" class="auth-submit">로그인</button>
+      </form>
+      <p id="login-error" class="form-error" role="alert"></p>
+    </div>
+  </div>
+
+  <main class="container" id="app-page" hidden>
+    <header class="page-header">
+      <h1 id="page-heading">Task Flow</h1>
+      <div id="account-view" class="account-bar">
+        <span id="account-info"></span>
+        <button id="logout-button" type="button" class="btn">로그아웃</button>
+      </div>
+    </header>
+
+    <div id="tasks-area" class="diary-spread" hidden>
+      <nav class="diary-index" aria-label="목록 전환">
+        <button type="button" id="nav-todo" class="index-tab active">TODO</button>
+        <button type="button" id="nav-archive" class="index-tab">ARCHIVE</button>
+      </nav>
+
+      <div class="diary-page">
+        <form id="task-form" class="task-form" novalidate>
+          <div class="form-row">
+            <label for="task-title" class="sr-only">할 일 제목</label>
+            <input id="task-title" name="title" type="text" placeholder="할 일 제목 (1~100자)" autocomplete="off">
+            <button id="submit-button" type="submit">등록</button>
+          </div>
+          <div class="form-row">
+            <label for="task-priority">우선순위</label>
+            <select id="task-priority" name="priority">
+              <option value="HIGH">높음</option>
+              <option value="NORMAL" selected>보통</option>
+              <option value="LOW">낮음</option>
+            </select>
+            <label for="task-due">마감일</label>
+            <input id="task-due" name="due_date" type="date">
+          </div>
+          <label for="task-description" class="sr-only">설명</label>
+          <textarea id="task-description" name="description" rows="2" placeholder="설명 (선택, 최대 2000자)"></textarea>
+        </form>
+        <p id="form-error" class="form-error" role="alert"></p>
+        <p id="api-error" class="form-error" role="alert"></p>
+
+        <section aria-labelledby="list-heading">
+          <h2 id="list-heading"><span id="view-title">TODO</span> <span id="task-count" class="count">(0)</span></h2>
+
+          <div class="filter-bar">
+            <label for="search-input" class="sr-only">제목 검색</label>
+            <input id="search-input" type="search" placeholder="제목 검색" autocomplete="off">
+            <label for="filter-priority" class="sr-only">우선순위 필터</label>
+            <select id="filter-priority">
+              <option value="">우선순위 전체</option>
+              <option value="HIGH">높음</option>
+              <option value="NORMAL">보통</option>
+              <option value="LOW">낮음</option>
+            </select>
+          </div>
+
+          <p id="empty-message" class="empty-message">등록된 할 일이 없습니다.</p>
+          <ul id="task-list" class="task-list"></ul>
+        </section>
+      </div>
+    </div>
   </main>
 
+  <script src="api.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,32 +1,266 @@
+:root {
+  --color-bg: #eaf5ff;
+  --color-surface: #ffffff;
+  --color-surface-muted: #e9edf2;
+  --color-sky: #d8f1ff;
+  --color-sky-strong: #b8dfff;
+  --color-border: #cfe6fb;
+  --color-text: #1f2937;
+  --color-muted: #64748b;
+  --color-primary: #2f8fea;
+  --color-primary-hover: #1c72c4;
+  --color-primary-contrast: #ffffff;
+  --color-focus: #2f8fea;
+  --color-danger: #c0392b;
+  --color-danger-bg: #fde2df;
+}
+
 * {
   box-sizing: border-box;
+}
+
+/* hidden 속성은 display:flex 등을 지정한 클래스보다 항상 우선한다. */
+[hidden] {
+  display: none !important;
 }
 
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
-  background: #f5f6f8;
-  color: #222;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 .container {
-  max-width: 640px;
+  max-width: 760px;
   margin: 40px auto;
   padding: 0 16px;
 }
 
 h1 {
+  margin: 0;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 24px;
+}
+
+.account-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 h2 {
   font-size: 1.1rem;
-  margin-top: 32px;
+  margin-top: 0;
 }
 
 .count {
-  color: #666;
+  color: var(--color-muted);
   font-weight: normal;
+}
+
+/* 로그인·회원가입: 다이어리 표지 느낌의 전체 화면 */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--color-sky);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--color-surface);
+  border-radius: 20px;
+  box-shadow: 0 16px 40px rgba(47, 143, 234, 0.16);
+  padding: 36px 32px;
+}
+
+.auth-title {
+  margin: 0 0 6px;
+  font-size: 1.45rem;
+  font-family: Georgia, "Noto Serif KR", serif;
+}
+
+.auth-subtitle {
+  margin: 0 0 24px;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--color-surface-muted);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 24px;
+}
+
+.auth-tab {
+  flex: 1;
+  text-align: center;
+  padding: 9px 0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  text-decoration: none;
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.auth-tab.active {
+  background: var(--color-sky-strong);
+  color: var(--color-primary-hover);
+  font-weight: 600;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.form-field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.auth-form input:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgba(59, 130, 196, 0.2);
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  padding-right: 44px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.password-toggle:hover {
+  background: var(--color-surface-muted);
+}
+
+.auth-submit {
+  width: 100%;
+  padding: 14px;
+  margin-top: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  cursor: pointer;
+}
+
+.auth-submit:hover {
+  background: var(--color-primary-hover);
+}
+
+.auth-submit:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+/* 할 일 화면: 다이어리가 펼쳐진 레이아웃 */
+.diary-spread {
+  display: flex;
+  align-items: stretch;
+  background: var(--color-surface);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(31, 41, 55, 0.14);
+  overflow: hidden;
+}
+
+.diary-index {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 136px;
+  flex-shrink: 0;
+  background: var(--color-primary);
+  padding: 28px 12px;
+}
+
+.index-tab {
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.index-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.index-tab.active {
+  background: var(--color-surface);
+  color: var(--color-primary-hover);
+}
+
+.diary-page {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 28px 32px;
 }
 
 .task-form {
@@ -50,9 +284,10 @@ h2 {
   padding: 8px 10px;
   font-size: 1rem;
   font-family: inherit;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .task-form #task-title {
@@ -72,33 +307,33 @@ h2 {
   font-size: 1rem;
   border: none;
   border-radius: 6px;
-  background: #2f6fed;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
   cursor: pointer;
 }
 
 .task-form button:hover {
-  background: #2459c4;
+  background: var(--color-primary-hover);
 }
 
 .task-form input:disabled,
 .task-form select:disabled,
 .task-form textarea:disabled,
 .task-form button:disabled {
-  background: #e0e0e0;
-  color: #888;
+  background: var(--color-surface-muted);
+  color: var(--color-muted);
   cursor: not-allowed;
 }
 
 .form-error {
   min-height: 1.2em;
   margin: 8px 0 0;
-  color: #c62828;
+  color: var(--color-danger);
   font-size: 0.9rem;
 }
 
 .empty-message {
-  color: #888;
+  color: var(--color-muted);
 }
 
 .task-list {
@@ -110,8 +345,8 @@ h2 {
 .task-list li {
   padding: 12px 14px;
   margin-bottom: 8px;
-  background: #fff;
-  border: 1px solid #e2e4e8;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
@@ -160,33 +395,33 @@ h2 {
   padding: 2px 8px;
   font-size: 0.8rem;
   border-radius: 999px;
-  background: #eef0f3;
-  color: #444;
+  background: var(--color-surface-muted);
+  color: var(--color-muted);
 }
 
 .badge.priority-high {
-  background: #fde8e8;
-  color: #b42318;
+  background: var(--color-danger-bg);
+  color: #a3301f;
 }
 
 .badge.priority-low {
-  background: #eef4ff;
-  color: #3555a5;
+  background: var(--color-sky);
+  color: #2d5d82;
 }
 
 .badge.overdue-badge {
-  background: #c62828;
+  background: var(--color-danger);
   color: #fff;
   font-weight: 600;
 }
 
 .task-list li.overdue {
-  border-left: 4px solid #c62828;
+  border-left: 4px solid var(--color-danger);
 }
 
 .task-description {
   margin: 8px 0 0;
-  color: #555;
+  color: var(--color-muted);
   font-size: 0.9rem;
   white-space: pre-wrap;
 }
@@ -203,33 +438,61 @@ h2 {
   font-family: inherit;
   padding: 6px 8px;
   font-size: 1rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
 }
 
 .task-list button,
-.task-list select {
+.task-list select,
+.btn {
   padding: 4px 10px;
   font-size: 0.9rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 
-.task-list button:hover {
-  background: #f0f0f0;
+.task-list button:hover,
+.btn:hover {
+  background: var(--color-surface-muted);
 }
 
 .task-list li.done .task-title {
-  color: #888;
+  color: var(--color-muted);
   text-decoration: line-through;
+}
+
+@media (max-width: 560px) {
+  .diary-spread {
+    flex-direction: column;
+  }
+
+  .diary-index {
+    flex-direction: row;
+    width: 100%;
+    padding: 10px;
+  }
+
+  .index-tab {
+    flex: 1;
+    text-align: center;
+  }
+
+  .diary-page {
+    padding: 20px 18px 24px;
+  }
 }
 
 @media (max-width: 480px) {
   .task-main {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .auth-card {
+    padding: 28px 22px;
   }
 }
 
