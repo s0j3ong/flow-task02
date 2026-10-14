@@ -6,3 +6,7 @@ uvicorn==0.54.0
 SQLAlchemy==2.0.54
 # PyMySQL: SQLAlchemy가 MariaDB에 접속할 때 쓰는 드라이버
 PyMySQL==1.2.3
+# bcrypt: 회원가입 비밀번호를 해시로 저장하고 로그인 시 검증하는 용도(평문 저장 방지)
+bcrypt==5.0.0
+# itsdangerous: 로그인 상태를 유지하는 서명된 세션 쿠키(Starlette SessionMiddleware)에 필요
+itsdangerous==2.2.0

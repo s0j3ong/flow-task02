@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 TITLE_MAX_LENGTH = 100
 DESCRIPTION_MAX_LENGTH = 2000
 DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+USERNAME_PATTERN = re.compile(r"[a-z0-9_]{4,20}")
+PASSWORD_MIN_LENGTH = 8
 
 
 class Status(str, Enum):
@@ -65,6 +67,8 @@ class TaskUpdate(BaseModel):
     priority: Priority | None = None
     # null을 보내면 마감일을 지운다.
     due_date: date | None = None
+    # 사용자가 직접 ARCHIVE로 보관하거나 TODO로 복원할 때 보낸다.
+    archived: bool | None = None
 
     _check_due_date = field_validator("due_date", mode="before")(check_due_date_format)
     _check_title = field_validator("title")(check_title)
@@ -72,7 +76,7 @@ class TaskUpdate(BaseModel):
     @model_validator(mode="after")
     def reject_null(self) -> "TaskUpdate":
         # 생략은 허용하지만 due_date 외의 필드에 null을 보내면 거절한다.
-        for name in ("title", "description", "status", "priority"):
+        for name in ("title", "description", "status", "priority", "archived"):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name}에는 null을 보낼 수 없습니다.")
         return self
@@ -91,4 +95,42 @@ class Task(BaseModel):
     status: Status
     priority: Priority
     due_date: date | None
+    archived: bool
     created_at: datetime
+
+
+def check_username(value: str) -> str:
+    username = value.strip()
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise ValueError("아이디는 영문 소문자·숫자·밑줄(_)로 4~20자여야 합니다.")
+    return username
+
+
+class UserCreate(BaseModel):
+    """POST /api/auth/signup 요청 본문. 정의되지 않은 필드는 거절한다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    username: str
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH)
+
+    _check_username = field_validator("username")(check_username)
+
+
+class User(BaseModel):
+    """API 응답의 사용자. 비밀번호 해시는 포함하지 않는다."""
+
+    id: int
+    username: str
+    created_at: datetime
+
+
+class UserLogin(BaseModel):
+    """POST /api/auth/login 요청 본문. 정의되지 않은 필드는 거절한다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    username: str
+    password: str
+
+    _check_username = field_validator("username")(check_username)
