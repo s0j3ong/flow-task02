@@ -67,15 +67,80 @@
   결과: 등록 행을 mariadb SELECT로 확인. API 재시작 후 같은 id·수정 내용 유지. 틀린 DB 비밀번호로 실행 시 /api/tasks 503, 로그에 비밀번호 미노출.
   테스트 항목([T11검증] 제목)은 확인 후 삭제해 tasks는 0행. AUTO_INCREMENT는 6부터 시작. 남은 오류 없음.
 ## 5장: 서버 분리
-- [ ] T12: DB 서버 구성 후 App 서버에서 SELECT 1 확인.
-- [ ] T13: App 서버 코드·가상환경·환경변수·systemd 구성.
+- [x] T12: DB 서버 구성 후 App 서버에서 SELECT 1 확인.
+  기록(2026-10-14): DB 서버 구성은 T09에서 완료(전용 DB·사용자). App 서버(backend/database.py의 engine)에서 SELECT 1 실행.
+  실행: .venv/bin/python -c "..." (sqlalchemy text('SELECT 1')).
+  결과: SELECT 1 → 1. 남은 오류 없음.
+  참고: 같은 WSL 환경 내 시뮬레이션이며 .env의 DB_HOST는 127.0.0.1(실제 분리된 네트워크 호스트 아님).
+- [x] T13: App 서버 코드·가상환경·환경변수·systemd 구성.
   확인: App에서 /api/health 응답.
-- [ ] T14: Web 서버 Nginx와 정적 파일·/api 프록시 구성.
+  기록(2026-10-14): deploy/flow-task-app.service 생성(기존 backend 코드·.venv·.env를 그대로 사용, EnvironmentFile로 .env 전달, uvicorn backend.main:app --host 127.0.0.1 --port 8000).
+  사용자가 sudo cp/daemon-reload/enable --now 직접 실행(이 세션은 sudo 비밀번호 입력 불가).
+  결과: systemctl status flow-task-app → active (running), enabled. curl /api/health → 200 {"status":"ok"}. curl /api/tasks → 200(DB 연결 포함 정상). 남은 오류 없음.
+  참고: 이번 단계는 같은 WSL 환경 내 시뮬레이션이며 실제 물리적으로 분리된 서버는 아니다.
+  기록(2026-10-14) 추가: 서비스 파일명을 deploy/task-flow-api.service로 변경(요청 반영). flow-task-app.service는 비활성화·삭제, task-flow-api.service로 재등록.
+  결과: systemctl status task-flow-api → active (running), enabled. flow-task-app 유닛 조회 시 "could not be found"로 정리 확인. curl /api/health → 200, curl /api/tasks → 200. 남은 오류 없음.
+- [x] T14: Web 서버 Nginx와 정적 파일·/api 프록시 구성.
   확인: Web 주소로 등록, DB 저장, App 재시작 후 유지.
+  기록(2026-10-14): deploy/task-flow-web.nginx.conf 생성(root /var/www/task-flow-web, location /api/는 127.0.0.1:8000으로 proxy_pass).
+  nginx가 홈 디렉터리(750 권한)에 접근 못 해 frontend 3개 파일을 /var/www/task-flow-web로 복사(www-data 소유)해 서빙. 기존 default 사이트 비활성화 후 task-flow-web 사이트 등록, 사용자가 sudo로 직접 실행.
+  backend/main.py 수정: app.mount("/", StaticFiles...) 제거, 미사용 Path·StaticFiles import 제거. API 서버(8000)가 /api/*만 담당하도록 역할 분리(요청 반영). API 계약(엔드포인트) 변경 없음.
+  실행: curl로 8000(API 전용, 루트 404)·80(Nginx, 프런트 200·/api 프록시 200) 확인.
+  결과: Web 주소(POST /api/tasks)로 등록 → mariadb SELECT로 DB 저장 확인(id 9) → sudo systemctl restart task-flow-api → Web 주소 GET /api/tasks에서 동일 항목 유지 확인. 확인 후 테스트 항목 삭제, 기존 사용자 데이터(id 3,4,5) 영향 없음. 남은 오류 없음.
+## 6장: 사용자 인증
+- [x] T15: users 테이블 설계·생성. backend/models.py에 UserRow(id, email unique, password_hash, created_at) 추가, init_db.py가 users도 생성하도록 확장.
+  확인: DESCRIBE users로 컬럼·unique 제약 확인. 기존 tasks 테이블과 데이터는 그대로 유지되는지 확인.
+  기록(2026-10-14): backend/models.py에 UserRow(id PK, email unique varchar(255), password_hash varchar(255), created_at) 추가.
+  init_db.py를 tasks·users 둘 다 테이블별로 존재 여부 확인 후 없는 것만 생성하도록 확장(기존 "없는 테이블만 생성" 동작 유지).
+  실행: python -m backend.init_db → "tasks 테이블이 이미 있어 변경하지 않았습니다." / "users 테이블을 만들었습니다."
+  결과: DESCRIBE users로 컬럼 4개 확인, SHOW INDEX FROM users로 email UNIQUE 인덱스 확인. tasks 기존 데이터(id 3,4,5) 그대로 유지. 남은 오류 없음.
+- [x] T16: 회원가입 API. POST /api/auth/signup(email, password). bcrypt로 해시 저장.
+  확인: 정상 가입 201, 중복 이메일 422, 8자 미만 비밀번호 422, 저장된 값이 평문이 아닌 해시인지 DB에서 확인.
+  기록(2026-10-14): requirements.txt에 bcrypt==5.0.0 추가(비밀번호 해시용). backend/schemas.py에 UserCreate(email 형식 검증, password 8자 이상)·User 응답 모델 추가.
+  backend/security.py(신규) bcrypt 해시·검증 함수, backend/users.py(신규) DbUserStore(이메일 중복 시 EmailAlreadyRegistered), backend/main.py에 POST /api/auth/signup(email 중복 422, 그 외 검증 실패는 pydantic 422) 추가.
+  실행: 임시 포트(8001)에서 curl로 확인 후 테스트 데이터 삭제, sudo systemctl restart task-flow-api로 운영 서비스 반영.
+  결과: 정상 가입 201, 중복 이메일 422, 8자 미만 비밀번호 422, 이메일 형식 오류 422, 정의되지 않은 필드 422. DB password_hash가 "$2b$12$..." 형태(평문 아님) 확인. 기존 tasks·users API 영향 없음. 남은 오류 없음.
+  추가(프런트엔드 일부 반영, 원래 T19 범위 중 회원가입 화면만 선반영): frontend/index.html에 회원가입 폼 섹션, frontend/styles.css에 .form-success·.auth-section, frontend/app.js에 이메일·비밀번호 검증과 /api/auth/signup 호출 추가.
+  로그인 화면은 아직 없음(T17 로그인 API 이후 T19에서 추가). Web 주소(80, Nginx 경유)로 가입 201, 중복 422 확인 후 테스트 데이터 삭제.
+  정정(2026-10-14, 사용자 요청): 식별자를 이메일에서 아이디(username, 영문 소문자·숫자·_, 4~20자)로 변경. PRD.md F10·F11·데이터·완료 기준 수정.
+  users 테이블은 이 시점까지 0행이어서 DROP TABLE 후 backend.init_db로 재생성(email unique → username(20) unique). backend/models.py·schemas.py·users.py(EmailAlreadyRegistered→UsernameAlreadyRegistered)·main.py, frontend 3개 파일 모두 email→username으로 수정.
+  재검증: 임시 포트(8001)와 Web 주소(80) 양쪽에서 가입 201·중복 아이디 422·형식 오류(대문자·3자 이하) 422 확인 후 테스트 데이터 삭제. API-SPEC.md에 User 객체·POST /api/auth/signup 문서화.
+- [x] T17: 로그인·로그아웃 API. POST /api/auth/login(세션 쿠키 발급), POST /api/auth/logout(세션 종료). 미인증 요청은 401.
+  확인: 정상 로그인 후 쿠키 발급, 잘못된 비밀번호 401, 로그아웃 후 보호된 API 재요청 시 401.
+  기록(2026-10-14): requirements.txt에 itsdangerous==2.2.0 추가(세션 쿠키 서명, Starlette SessionMiddleware 의존성). .env·.env.example에 SESSION_SECRET_KEY 추가(.env 값은 무작위 생성, 비공개로 추가).
+  backend/main.py에 SessionMiddleware 등록(쿠키명 task_flow_session, HttpOnly, same_site=lax, https_only=False(현재 Nginx가 http만 제공), max_age 24시간), load_session_secret()로 SESSION_SECRET_KEY 필수화.
+  backend/users.py에 authenticate(username, password)·get(user_id) 추가. backend/schemas.py에 UserLogin 추가. POST /api/auth/login(실패 시 401, 메시지는 아이디·비밀번호 구분 없이 동일)과 POST /api/auth/logout(세션 없으면 401, 있으면 204+세션 clear) 추가.
+  실행: 임시 포트(8001)와 Web 주소(80) 양쪽에서 curl+쿠키 저장소로 확인. 테스트 계정 삭제 후 sudo systemctl restart task-flow-api로 반영.
+  결과: 정상 로그인 200+Set-Cookie 확인, 잘못된 비밀번호·존재하지 않는 아이디 401(메시지 동일), 정의되지 않은 필드·필드 누락 422. 로그아웃 204, 세션 쿠키 갱신 후 재로그아웃 401, 쿠키 없이 로그아웃 401. API-SPEC.md에 두 엔드포인트 문서화. 남은 오류 없음.
+  추가(2026-10-14, 사용자 요청 — 프런트엔드 전면 반영, 방침 변경): "백엔드 기능 구현 시 대응 프런트엔드도 같은 작업에서 함께 구현"으로 AGENTS.md 구현 범위에 규칙 추가.
+  frontend/signup.html·signup.js(신규)로 회원가입을 별도 페이지로 분리. frontend/api.js(신규)에 API_BASE·ApiError·errorMessage·request 공통 로직 추출(app.js·signup.js가 공유).
+  index.html 상단을 로그인 영역(아이디·비밀번호·로그인 버튼, 그 아래 회원가입 페이지 이동 버튼)으로 교체, 로그인 성공 시 계정 정보·로그아웃 버튼으로 전환. app.js에 로그인/로그아웃 핸들러 추가, styles.css에 .btn·.signup-link-row 추가.
+  실행: node --check로 3개 JS 파일 문법 확인 후 /var/www/task-flow-web에 배포. Web 주소(80)에서 signup.html 가입 → index.html 로그인(쿠키 발급) → 로그아웃(204) 전체 플로우 curl로 확인, 테스트 계정 삭제.
+  참고: 할 일 목록 화면은 아직 로그인 여부와 무관하게 항상 보임(T18에서 로그인 필요하도록 연결 예정). 남은 오류 없음.
+- [x] T18: tasks에 user_id 연결. tasks 테이블에 user_id 컬럼 추가(기존 행은 첫 회원가입 계정으로 귀속), 기존 할 일 API(GET·POST·PATCH·DELETE)에 로그인 필요·소유자 필터링 적용.
+  프런트엔드도 함께 반영(로그인 화면과 로그아웃 버튼은 T16·T17에서 선반영 완료): 로그인 상태에 따라 할 일 등록 폼·목록을 보이거나 숨긴다. 로그인 없이 /api/tasks 호출 시 401을 화면에서 안내로 보여준다.
+  확인: 로그인 없이 /api/tasks 요청 시 401. 다른 사용자 id로 만든 할 일은 보이지도 수정되지도 않는다. 기존 tasks 3건이 삭제되지 않고 귀속 계정 소유로 남아있는지 확인. 화면에서 로그아웃 상태→할 일 화면 숨김, 로그인 후 등장까지 확인.
+  기록(2026-10-14): backend/models.py에 TaskRow.user_id(ForeignKey users.id, NOT NULL) 추가. backend/add_task_owner.py(신규, 멱등) 작성·실행: 컬럼 추가 → 기존 tasks 3건을 첫 회원가입 계정(admin, id=5)으로 귀속 → NOT NULL·외래 키 제약 적용.
+  backend/store.py의 list·create·update·delete에 user_id 매개변수 추가(다른 사용자 소유 id는 404로 응답, 존재 여부를 알려주지 않음). backend/main.py에 require_user 의존성(세션에 user_id 없으면 401) 추가, 4개 엔드포인트에 적용. API-SPEC.md에 401·소유자 분리 규칙 문서화.
+  실행: 임시 포트(8001)에서 userA·userB 테스트 계정으로 격리 확인 후 삭제. sudo systemctl restart task-flow-api로 반영.
+  결과: 로그인 없이 401, userB가 userA의 할 일 조회·수정·삭제 시도 시 404, userA 목록은 유지. admin의 기존 데이터는 영향 없음(단, 사용자가 실제 브라우저에서 직접 삭제해 현재 0건 — 제가 변경한 것 아님, 확인 완료). 남은 오류 없음.
+  프런트엔드(사용자 요청으로 여러 차례 반복 조정): index.html에 tasks-area/인증 상태 분기 추가 → 로그인 전용 풀페이지 카드(auth-page/auth-card, 탭형 로그인·회원가입 전환, 라벨+비밀번호 눈 아이콘, 로그인/회원가입 버튼)로 재구성 → 로그인 후 우측 상단에 아이디·로그아웃 표시 → 전체 색상을 온색(주황·테라코타) 계열로 변경(styles.css CSS 변수화) → 회원가입 성공 시 안내 문구 없이 index.html로 자동 이동.
+  frontend/api.js(신규)에 공통 request/ApiError와 setupPasswordToggle 유틸 추출, signup.html·signup.js도 같은 카드 디자인 적용.
+  실행: node --check로 매 변경마다 JS 문법 확인 후 /var/www/task-flow-web 배포. 남은 오류 없음.
+## 7장: 다이어리 컨셉 개편
+- [ ] T20: 로그인·회원가입 화면을 다이어리 표지 느낌으로 재디자인. 화면 중앙에 로그인/회원가입 카드를 유지하되 표지 분위기(질감·색상·타이포)를 반영한다.
+  확인: 로그인·회원가입 화면에서 다이어리 표지 느낌을 실제로 확인(주관적 디자인이라 Windows 브라우저로 사용자가 확인).
+- [ ] T21: 할 일 화면을 다이어리가 펼쳐진 레이아웃으로 재구성. 좌측에 TODO·ARCHIVE 인덱스 탭을 추가해 클릭 시 화면을 전환한다. 우측 상단 아이디·로그아웃은 유지한다.
+  확인: TODO·ARCHIVE 탭 클릭 시 해당 화면으로 전환. 기존 등록·수정·삭제·완료 기능은 TODO 화면에서 그대로 동작.
+- [ ] T22: ARCHIVE 분류 로직 적용. DONE 상태이거나 마감일이 지난(F09 기준) 항목은 TODO 화면에서 숨기고 ARCHIVE 화면에서만 보여준다. API 변경은 없고 화면에서 기존 목록을 분류한다.
+  확인: 항목을 완료 처리하면 TODO에서 사라지고 ARCHIVE에 나타남. 마감일이 지난 미완료 항목도 ARCHIVE에 나타남. 사용자별 분리(T18)는 그대로 유지.
 ## 실행 기준
 T01~T04: python3 -m http.server 5500 --bind 127.0.0.1 --directory frontend
 T05~T11: 가상환경에서 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+T12~T22: T13에서 등록한 systemd 서비스(task-flow-api) 사용. 코드 변경 후 sudo systemctl restart task-flow-api로 반영 확인.
 실제 존재하는 파일을 확인한 뒤 명령을 실행한다.
+## 새 의존성
+bcrypt==5.0.0(T16 적용): 비밀번호 해시 저장용. itsdangerous==2.2.0(T17 적용): FastAPI(Starlette) 세션 쿠키 서명용. requirements.txt에 기록 완료.
 ## 기록
 각 작업에 변경 파일, 실행 명령, 실제 확인 결과, 남은 오류를 기록한다.
 정상 동작을 확인한 작업 단위로 Git 커밋한다.
