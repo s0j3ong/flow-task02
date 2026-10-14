@@ -1,0 +1,14 @@
+[Unit]
+Description=Task Flow API 서버 (FastAPI/uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=mzc_lsj
+WorkingDirectory=/home/mzc_lsj/vibe-lab/flow-task
+EnvironmentFile=/home/mzc_lsj/vibe-lab/flow-task/.env
+ExecStart=/home/mzc_lsj/vibe-lab/flow-task/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
